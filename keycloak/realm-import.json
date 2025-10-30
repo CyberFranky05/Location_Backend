@@ -1,0 +1,87 @@
+{
+  "id": "location-auth-realm",
+  "realm": "location-auth-realm",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "permanentLockout": false,
+  "clients": [
+    {
+      "clientId": "location-auth-backend",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "secret123",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "authorizationServicesEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      },
+      "protocolMappers": [],
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "location-auth-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect",
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "User role",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "admin",
+        "description": "Admin role",
+        "composite": false,
+        "clientRole": false
+      }
+    ],
+    "client": {
+      "realm-management": []
+    }
+  },
+  "defaultRoles": ["user"],
+  "requiredCredentials": ["password"],
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "browserFlow": "browser",
+  "registrationFlow": "registration",
+  "directGrantFlow": "direct grant",
+  "resetCredentialsFlow": "reset credentials",
+  "clientAuthenticationFlow": "clients",
+  "users": [
+    {
+      "username": "service-account-location-auth-backend",
+      "enabled": true,
+      "serviceAccountClientId": "location-auth-backend",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users", "query-groups"]
+      }
+    }
+  ]
+}

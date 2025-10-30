@@ -1,0 +1,107 @@
+version: '3.8'
+
+# Docker Compose for Backend-only deployment (EC2)
+# Frontend is hosted on Vercel separately
+
+services:
+  # PostgreSQL Database for Keycloak
+  postgres:
+    image: postgres:16-alpine
+    container_name: location-auth-postgres
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Keycloak (Production with PostgreSQL)
+  keycloak:
+    image: mrelec1r0n/location-auth-keycloak:latest
+    container_name: location-auth-keycloak
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:${POSTGRES_PORT:-5432}/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+      - KC_HOSTNAME=${EC2_PUBLIC_IP}
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_PATH=/auth
+      - KC_PROXY=edge
+      - KC_HTTP_ENABLED=true
+    volumes:
+      - ./keycloak/realm-import.json:/opt/keycloak/data/import/realm-import.json:ro
+    command:
+      - start
+      - --import-realm
+      - --http-relative-path=/auth
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Backend API
+  backend:
+    image: mrelec1r0n/location-auth-backend:latest
+    container_name: location-auth-backend
+    environment:
+      - NODE_ENV=production
+      - KEYCLOAK_URL=http://keycloak:${KEYCLOAK_PORT:-8080}
+      - KEYCLOAK_REALM=location-auth-realm
+      - KEYCLOAK_CLIENT_ID=location-auth-backend
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_USER_CLIENT_ID=location-auth-frontend
+      - CORS_ORIGIN=${VERCEL_FRONTEND_URL}
+      - PORT=${BACKEND_PORT:-3000}
+      - HOST=0.0.0.0
+      - JWT_SECRET=${JWT_SECRET}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - IPAPI_URL=https://ipapi.co
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # Nginx Reverse Proxy (HTTP only - no SSL for IP address)
+  nginx:
+    image: nginx:alpine
+    container_name: location-auth-nginx
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.backend.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - keycloak
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

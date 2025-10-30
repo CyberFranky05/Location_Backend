@@ -1,0 +1,136 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
+
+    # SSL Configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security Headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    # CORS Headers (allow Vercel frontend)
+    map $http_origin $cors_origin {
+        default "";
+        "~^https://.*\.vercel\.app$" $http_origin;
+        "${VERCEL_FRONTEND_URL}" $http_origin;
+    }
+
+    # Gzip Compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss application/rss+xml font/truetype font/opentype application/vnd.ms-fontobject image/svg+xml;
+
+    # HTTP to HTTPS redirect
+    server {
+        listen 80;
+        server_name ${BACKEND_DOMAIN};
+
+        # Allow certbot challenge
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        # Redirect all other traffic to HTTPS
+        location / {
+            return 301 https://${BACKEND_DOMAIN}$request_uri;
+        }
+    }
+
+    # Backend API & Keycloak
+    server {
+        listen 443 ssl http2;
+        server_name ${BACKEND_DOMAIN};
+
+        ssl_certificate /etc/letsencrypt/live/${BACKEND_DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${BACKEND_DOMAIN}/privkey.pem;
+
+        limit_req zone=api burst=50 nodelay;
+        client_max_body_size 10M;
+
+        # Backend API
+        location /api/ {
+            # CORS headers
+            add_header 'Access-Control-Allow-Origin' $cors_origin always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+
+            # Handle preflight requests
+            if ($request_method = 'OPTIONS') {
+                add_header 'Access-Control-Allow-Origin' $cors_origin;
+                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
+                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept';
+                add_header 'Access-Control-Allow-Credentials' 'true';
+                add_header 'Content-Length' 0;
+                add_header 'Content-Type' 'text/plain';
+                return 204;
+            }
+            
+            proxy_pass http://backend:${BACKEND_PORT}/api/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        # Keycloak Authentication
+        location /auth/ {
+            # CORS headers
+            add_header 'Access-Control-Allow-Origin' $cors_origin always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+
+            # Handle preflight requests
+            if ($request_method = 'OPTIONS') {
+                add_header 'Access-Control-Allow-Origin' $cors_origin;
+                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
+                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept';
+                add_header 'Access-Control-Allow-Credentials' 'true';
+                add_header 'Content-Length' 0;
+                add_header 'Content-Type' 'text/plain';
+                return 204;
+            }
+            
+            proxy_pass http://keycloak:${KEYCLOAK_PORT}/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_cache_bypass $http_upgrade;
+            
+            # Keycloak specific headers
+            proxy_buffer_size 128k;
+            proxy_buffers 4 256k;
+            proxy_busy_buffers_size 256k;
+        }
+
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "OK\n";
+            add_header Content-Type text/plain;
+        }
+    }
+}
