@@ -64,7 +64,7 @@ services:
     container_name: location-auth-backend
     environment:
       - NODE_ENV=production
-      - KEYCLOAK_URL=http://keycloak:${KEYCLOAK_PORT:-8080}
+      - KEYCLOAK_URL=http://keycloak:${KEYCLOAK_PORT:-8080}/auth
       - KEYCLOAK_REALM=location-auth-realm
       - KEYCLOAK_CLIENT_ID=location-auth-backend
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
@@ -105,3 +105,4 @@ networks:
 volumes:
   postgres_data:
     driver: local
+
