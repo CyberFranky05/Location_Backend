@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Matches, IsOptional, IsIP } from 'class-validator';
 
 export class SignUpDto {
   @IsString()
@@ -15,6 +15,10 @@ export class SignUpDto {
     message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
   })
   password: string;
+
+  @IsOptional()
+  @IsIP()
+  clientIp?: string;
 }
 
 export class SignInDto {
@@ -25,6 +29,10 @@ export class SignInDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  @IsOptional()
+  @IsIP()
+  clientIp?: string;
 }
 
 export class RefreshTokenDto {

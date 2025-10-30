@@ -26,9 +26,13 @@ export class AuthController {
   @Post('signup')
   async signUp(@Body() signUpDto: SignUpDto, @Req() request: Request) {
     try {
-      // Extract IP and get location
-      const ipAddress = this.geolocationService.extractIPFromRequest(request);
+      // Prefer client-provided IP, otherwise extract from request
+      const ipAddress = signUpDto.clientIp || this.geolocationService.extractIPFromRequest(request);
+      console.log(`📍 [SignUp] IP to geolocate: ${ipAddress}${signUpDto.clientIp ? ' (client-provided)' : ' (server-detected)'}`);
+      
       const locationData = await this.geolocationService.getLocationFromIP(ipAddress);
+      console.log(`🌍 [SignUp] Location: ${locationData.city}, ${locationData.country}`);
+      
       const userAgent = request.headers['user-agent'] || '';
       const { browser, device, os } = this.geolocationService.parseUserAgent(userAgent);
 
@@ -101,9 +105,13 @@ export class AuthController {
   async signIn(@Body() signInDto: SignInDto, @Req() request: Request) {
     console.log('🔓 Sign-in attempt for:', signInDto.email);
     
-    // Extract IP and location data
-    const ipAddress = this.geolocationService.extractIPFromRequest(request);
+    // Prefer client-provided IP, otherwise extract from request
+    const ipAddress = signInDto.clientIp || this.geolocationService.extractIPFromRequest(request);
+    console.log(`📍 [SignIn] IP to geolocate: ${ipAddress}${signInDto.clientIp ? ' (client-provided)' : ' (server-detected)'}`);
+    
     const locationData = await this.geolocationService.getLocationFromIP(ipAddress);
+    console.log(`🌍 [SignIn] Location: ${locationData.city}, ${locationData.country}`);
+    
     const userAgent = request.headers['user-agent'] || '';
     const { browser, device, os } = this.geolocationService.parseUserAgent(userAgent);
 
